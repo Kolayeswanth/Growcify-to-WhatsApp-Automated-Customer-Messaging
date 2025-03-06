@@ -3,13 +3,11 @@ const axios = require("axios");
 const bodyParser = require("body-parser");
 require("dotenv").config();
 
-// Environment variables validation
 const requiredEnvVars = {
     TENANT_ID: process.env.TENANT_ID,
     WATI_API_KEY: process.env.WATI_API_KEY
 };
 
-// Check for missing environment variables
 const missingVars = Object.entries(requiredEnvVars)
     .filter(([key, value]) => !value)
     .map(([key]) => key);
@@ -22,7 +20,6 @@ if (missingVars.length > 0) {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware for request logging
 app.use((req, res, next) => {
     console.log(`📝 [${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
@@ -30,7 +27,6 @@ app.use((req, res, next) => {
 
 app.use(bodyParser.json());
 
-// Define template configurations for each event type
 const eventTemplates = {
     "user.signup": {
         templateName: "bo_signup",
@@ -40,18 +36,9 @@ const eventTemplates = {
             { name: "referral_code", value: data.user?.referralCode || "" },
         ]
     },
-    "user.signin": {
-        templateName: "user_signin",
-        parameters: (data) => [
-            { name: "name", value: data.user?.name || "Customer" },
-            { name: "date", value: new Date().toLocaleDateString() },
-            { name: "time", value: new Date().toLocaleTimeString() }
-        ]
-    },
     "order.placed": {
-        templateName: "order_placed",
+        templateName: "bo_order_placed",
         parameters: (data) => {
-            // Calculate total savings
             let totalMarketPrice = 0;
             data.order?.items?.forEach(item => {
                 totalMarketPrice += (item.marketPrice * item.qty) || 0;
@@ -76,42 +63,9 @@ const eventTemplates = {
         }
     },
 
-    "order.accepted": {
-        templateName: "order_accepted",
-        parameters: (data) => [
-            { name: "order_id", value: data.order?.oid?.toString() || "" },
-            { name: "customer_name", value: data.order?.user?.name || "Customer" },
-            { name: "date", value: new Date(data.order?.createdAt).toLocaleDateString() || "" },
-            { name: "amount", value: data.order?.amount?.toString() || "0" },
-            { name: "delivery_mode", value: data.order?.deliveryMode === 'pick-up' ? 'Self Pick-up' : 'Home Delivery' },
-            { name: "accepted_time", value: new Date(data.order?.acceptedAt).toLocaleTimeString() || "" }
-        ]
-    },
-
-    "order.shipped": {
-        templateName: "order_shipped",
-        parameters: (data) => [
-            { name: "order_id", value: data.order?.oid?.toString() || "" },
-            { name: "customer_name", value: data.order?.user?.name || "Customer" },
-            { name: "date", value: new Date(data.order?.createdAt).toLocaleDateString() || "" },
-            { name: "amount", value: data.order?.amount?.toString() || "0" },
-            { name: "estimated_delivery", value: "Today" } // You might want to calculate this based on your business logic
-        ]
-    },
-
-    "order.delivered": {
-        templateName: "order_delivered",
-        parameters: (data) => [
-            { name: "order_id", value: data.order?.oid?.toString() || "" },
-            { name: "customer_name", value: data.order?.user?.name || "Customer" },
-            { name: "date", value: new Date(data.order?.createdAt).toLocaleDateString() || "" },
-            { name: "amount", value: data.order?.amount?.toString() || "0" },
-            { name: "delivery_date", value: new Date().toLocaleDateString() }
-        ]
-    },
 
     "order.cancelled": {
-        templateName: "order_cancelled",
+        templateName: "bo_order_cancelled",
         parameters: (data) => [
             { name: "order_id", value: data.order?.oid?.toString() || "" },
             { name: "customer_name", value: data.order?.user?.name || "Customer" },
@@ -128,7 +82,6 @@ app.post("/growcify-webhook", async (req, res) => {
         
         const { event, data } = req.body;
 
-        // Validate required fields
         if (!event || !data) {
             console.error('❌ Missing required fields in webhook payload');
             return res.status(400).json({ 
@@ -138,7 +91,6 @@ app.post("/growcify-webhook", async (req, res) => {
             });
         }
 
-        // Check if we have a template configuration for this event
         if (!eventTemplates[event]) {
             console.warn('⚠️ Unhandled event type received:', event);
             return res.status(400).json({ 
