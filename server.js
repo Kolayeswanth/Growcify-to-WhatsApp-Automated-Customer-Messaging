@@ -3,8 +3,7 @@ const axios = require("axios");
 const bodyParser = require("body-parser");
 require("dotenv").config();
 
-// ========== ENVIRONMENT SETUP & VALIDATION ==========
-console.log('🔍 Starting environment validation...');
+// ==== ENVIRONMENT VARIABLES VALIDATION ====
 const requiredEnvVars = {
     TENANT_ID: process.env.TENANT_ID,
     WATI_API_KEY: process.env.WATI_API_KEY
@@ -19,62 +18,20 @@ if (missingVars.length > 0) {
     process.exit(1);
 }
 
-// Log environment variables (masked for security)
-console.log('⚙️ Environment configuration:');
-console.log(`- TENANT_ID: ${process.env.TENANT_ID ? '******' + process.env.TENANT_ID.slice(-4) : 'NOT SET'}`);
-console.log(`- WATI_API_KEY: ${process.env.WATI_API_KEY ? '******' + process.env.WATI_API_KEY.slice(-4) : 'NOT SET'}`);
-console.log(`- NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
-console.log(`- PORT: ${process.env.PORT || 5000}`);
-
-// ========== EXPRESS APP SETUP ==========
+// ==== EXPRESS APP SETUP ====
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS middleware
-app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-    if (req.method === 'OPTIONS') {
-        res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE");
-        return res.status(200).json({});
-    }
-    next();
-});
-
 // Request logging middleware
 app.use((req, res, next) => {
-    const timestamp = new Date().toISOString();
-    console.log(`📝 [${timestamp}] ${req.method} ${req.url}`);
-    
-    // Log request headers for debugging
-    if (process.env.NODE_ENV !== 'production') {
-        console.log('📋 Request Headers:', JSON.stringify(req.headers, null, 2));
-    }
-    
-    // Track response time
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        console.log(`⏱️ [${timestamp}] ${req.method} ${req.url} - Status: ${res.statusCode} - Duration: ${duration}ms`);
-    });
-    
+    console.log(`📝 [${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
 });
 
 // Body parser middleware
-app.use(bodyParser.json({
-    verify: (req, res, buf) => {
-        try {
-            JSON.parse(buf);
-        } catch (e) {
-            console.error('❌ Invalid JSON in request body:', e.message);
-            res.status(400).json({ success: false, message: 'Invalid JSON payload' });
-            throw new Error('Invalid JSON');
-        }
-    }
-}));
+app.use(bodyParser.json());
 
-// ========== EVENT TEMPLATES ==========
+// ==== EVENT TEMPLATE CONFIGURATIONS ====
 const eventTemplates = {
     "user.signup": {
         templateName: "bo_signup",
@@ -122,60 +79,56 @@ const eventTemplates = {
     }
 };
 
-// ========== HELPER FUNCTIONS ==========
-// Function to validate mobile number format
-function validateMobileNumber(mobile) {
+// ==== UTILITY FUNCTIONS ====
+/**
+ * Format a phone number for WhatsApp by ensuring it has the country code
+ * @param {string} mobile - The mobile number
+ * @param {string} callingCode - Optional calling code
+ * @returns {string} - Formatted WhatsApp number
+ */
+function formatWhatsappNumber(mobile, callingCode) {
+    if (!mobile) return null;
+    
     // Remove any non-digit characters
-    const cleaned = mobile.replace(/\D/g, '');
+    const cleanMobile = mobile.toString().replace(/\D/g, '');
     
-    // Check if it's a valid Indian number
-    if (/^91\d{10}$/.test(cleaned)) {
-        return cleaned; // Already has country code
-    } else if (/^\d{10}$/.test(cleaned)) {
-        return `91${cleaned}`; // Add country code
-    } else {
-        console.warn('⚠️ Invalid mobile number format:', mobile);
-        return null;
+    // If already has country code
+    if (cleanMobile.startsWith('91')) {
+        return cleanMobile;
     }
+    
+    // If calling code is provided
+    if (callingCode) {
+        return `${callingCode.replace(/\D/g, '')}${cleanMobile}`;
+    }
+    
+    // Default to Indian country code
+    return `91${cleanMobile}`;
 }
 
-// Function to extract user mobile from data
-function extractMobileNumber(data, event) {
-    let mobile = null;
-    
-    if (event.startsWith("user.") && data.user?.mobile) {
-        mobile = data.user.mobile;
-    } else if (event.startsWith("order.")) {
-        mobile = data.user?.mobile || data.order?.userMobile || data.order?.user?.mobile;
-    }
-    
-    if (!mobile) {
-        console.error('❌ No mobile number found in payload for event:', event);
-        console.log('📄 Data structure:', JSON.stringify(data, null, 2));
-        return null;
-    }
-    
-    return validateMobileNumber(mobile);
-}
-
-// Function to send message to WATI API
-async function sendWatiMessage(whatsappNumber, templateName, parameters) {
+/**
+ * Send a WhatsApp message using WATI API
+ * @param {string} whatsappNumber - The recipient's WhatsApp number
+ * @param {string} templateName - The template name
+ * @param {Array} parameters - Template parameters
+ * @returns {Promise} - API response
+ */
+async function sendWhatsappMessage(whatsappNumber, templateName, parameters) {
     const tenantId = process.env.TENANT_ID;
     const watiToken = process.env.WATI_API_KEY;
     
-    // Construct API URL and payload
     const watiApiUrl = `https://live-mt-server.wati.io/${tenantId}/api/v1/sendTemplateMessage?whatsappNumber=${whatsappNumber}`;
+    
     const payload = {
         template_name: templateName,
-        broadcast_name: "testing",
+        broadcast_name: "growcify_notification",
         parameters: parameters
     };
     
-    console.log('🚀 WATI API Request:');
-    console.log(`- URL: ${watiApiUrl}`);
-    console.log(`- Template: ${templateName}`);
-    console.log(`- WhatsApp Number: ${whatsappNumber}`);
-    console.log(`- Parameters: ${JSON.stringify(parameters, null, 2)}`);
+    console.log('📤 Sending request to WATI API:', {
+        url: watiApiUrl,
+        payload: JSON.stringify(payload, null, 2)
+    });
     
     try {
         const response = await axios.post(watiApiUrl, payload, {
@@ -185,46 +138,25 @@ async function sendWatiMessage(whatsappNumber, templateName, parameters) {
             }
         });
         
-        console.log('✅ WATI API Response:', JSON.stringify(response.data, null, 2));
-        return { success: true, data: response.data };
+        console.log('✅ WATI API Response:', response.data);
+        return response.data;
     } catch (error) {
-        console.error('❌ WATI API Error:');
-        console.error(`- Status: ${error.response?.status || 'Unknown'}`);
-        console.error(`- Error Message: ${error.message}`);
-        console.error(`- Response Data: ${JSON.stringify(error.response?.data || {}, null, 2)}`);
-        
-        // Check for specific error types
-        if (error.response?.status === 401) {
-            console.error('⚠️ Authentication failed. Check your WATI API key.');
-        } else if (error.response?.status === 404) {
-            console.error('⚠️ Resource not found. Check tenant ID and template name.');
-        } else if (error.response?.data?.errors?.includes('Template is not Approved')) {
-            console.error('⚠️ Template is not approved by WhatsApp.');
-        }
-        
-        return { success: false, error: error.response?.data || error.message };
+        console.error('❌ WATI API Error:', {
+            message: error.message,
+            response: error.response?.data
+        });
+        throw error;
     }
 }
 
-// ========== ROUTES ==========
-// Health check endpoint
-app.get("/health", (req, res) => {
-    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-// Main webhook endpoint
+// ==== MAIN WEBHOOK ENDPOINT ====
 app.post("/growcify-webhook", async (req, res) => {
-    const processingStartTime = Date.now();
-    console.log('==================================================');
-    console.log(`🔄 PROCESSING WEBHOOK [${new Date().toISOString()}]`);
-    
     try {
-        // Log full request body for debugging
-        console.log('📥 FULL WEBHOOK PAYLOAD:', JSON.stringify(req.body, null, 2));
+        console.log('📥 Received webhook payload:', JSON.stringify(req.body, null, 2));
         
         const { event, data } = req.body;
-        
-        // Validate required fields
+
+        // Validate basic request structure
         if (!event || !data) {
             console.error('❌ Missing required fields in webhook payload');
             return res.status(400).json({ 
@@ -233,10 +165,8 @@ app.post("/growcify-webhook", async (req, res) => {
                 required: ['event', 'data'] 
             });
         }
-        
-        console.log(`📌 Processing event type: ${event}`);
-        
-        // Check if event type is supported
+
+        // Validate event type
         if (!eventTemplates[event]) {
             console.warn('⚠️ Unhandled event type received:', event);
             return res.status(400).json({ 
@@ -246,143 +176,151 @@ app.post("/growcify-webhook", async (req, res) => {
                 supportedEvents: Object.keys(eventTemplates)
             });
         }
+
+        // Extract and validate user information
+        let userMobile = null;
+        let callingCode = null;
         
-        // Get WhatsApp number
-        const whatsappNumber = extractMobileNumber(data, event);
+        // User signup events
+        if (event.startsWith("user.")) {
+            if (!data.user?.mobile) {
+                console.error('❌ Missing mobile number in user data');
+                return res.status(400).json({ 
+                    success: false,
+                    message: "Missing mobile number in user data" 
+                });
+            }
+            userMobile = data.user.mobile;
+            callingCode = data.user.callingCode;
+        }
+        
+        // Order events
+        if (event.startsWith("order.")) {
+            if (!data.order) {
+                console.error('❌ Missing order details in payload');
+                return res.status(400).json({ 
+                    success: false,
+                    message: "Missing order details" 
+                });
+            }
+            
+            // Try to find mobile number in different possible locations
+            userMobile = data.user?.mobile || data.order?.userMobile || data.order?.user?.mobile;
+            callingCode = data.user?.callingCode || data.order?.user?.callingCode;
+            
+            if (!userMobile) {
+                console.error('❌ Missing mobile number for order notifications');
+                return res.status(400).json({ 
+                    success: false,
+                    message: "Missing mobile number for order notifications" 
+                });
+            }
+        }
+
+        // Format WhatsApp number
+        const whatsappNumber = formatWhatsappNumber(userMobile, callingCode);
+        
         if (!whatsappNumber) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 success: false,
-                message: "Invalid or missing mobile number" 
+                message: "Invalid mobile number format"
             });
         }
         
-        // For order-related events, validate order details
-        if (event.startsWith("order.") && !data.order) {
-            console.error('❌ Missing order details in payload');
-            return res.status(400).json({ 
-                success: false,
-                message: "Missing order details" 
-            });
-        }
-        
-        // Get template configuration and generate parameters
+        console.log(`👤 Processing ${event} event`);
+        console.log('📱 Original mobile:', userMobile);
+        console.log('📱 Formatted WhatsApp number:', whatsappNumber);
+
+        // Get template configuration
         const templateConfig = eventTemplates[event];
-        console.log(`📋 Using template: ${templateConfig.templateName}`);
         
-        // Generate template parameters
-        console.log('🔄 Generating template parameters...');
-        let parameters;
-        try {
-            parameters = templateConfig.parameters(data);
-            console.log('✅ Parameters generated successfully:', JSON.stringify(parameters, null, 2));
-        } catch (paramError) {
-            console.error('❌ Error generating parameters:', paramError);
-            return res.status(400).json({ 
-                success: false,
-                message: "Error processing template parameters",
-                error: paramError.message
-            });
-        }
-        
-        // Send message to WATI
-        console.log(`📱 Sending message to WhatsApp number: ${whatsappNumber}`);
-        const watiResult = await sendWatiMessage(whatsappNumber, templateConfig.templateName, parameters);
-        
-        if (!watiResult.success) {
-            return res.status(500).json({ 
-                success: false,
-                message: "Failed to send WhatsApp message",
-                error: watiResult.error
-            });
-        }
-        
-        const processingTime = Date.now() - processingStartTime;
-        console.log(`✅ Webhook processed successfully in ${processingTime}ms`);
-        
+        // Send WhatsApp message
+        const watiResponse = await sendWhatsappMessage(
+            whatsappNumber,
+            templateConfig.templateName,
+            templateConfig.parameters(data)
+        );
+
         return res.status(200).json({ 
             success: true, 
             message: "WhatsApp message sent successfully!",
             event: event,
-            processingTime: `${processingTime}ms`,
-            response: watiResult.data
+            response: watiResponse
         });
-        
+
     } catch (error) {
-        console.error('❌ UNHANDLED ERROR:');
-        console.error(`- Message: ${error.message}`);
-        console.error(`- Stack: ${error.stack}`);
-        
-        if (error.response) {
-            console.error('- API Response Status:', error.response.status);
-            console.error('- API Response Headers:', JSON.stringify(error.response.headers, null, 2));
-            console.error('- API Response Data:', JSON.stringify(error.response.data, null, 2));
-        }
-        
-        if (error.request) {
-            console.error('- Request was made but no response received');
-        }
-        
+        console.error('❌ Error details:', {
+            message: error.message,
+            response: error.response?.data,
+            stack: error.stack
+        });
+
         res.status(500).json({ 
             success: false,
             message: "Internal server error",
-            error: error.message
-        });
-    }
-    
-    console.log('==================================================');
-});
-
-// Test endpoint for WATI integration
-app.post("/test-wati", async (req, res) => {
-    try {
-        const { whatsappNumber, templateName, parameters } = req.body;
-        
-        if (!whatsappNumber || !templateName) {
-            return res.status(400).json({
-                success: false,
-                message: "Missing required fields",
-                required: ['whatsappNumber', 'templateName']
-            });
-        }
-        
-        console.log('🧪 Testing WATI integration directly');
-        const result = await sendWatiMessage(whatsappNumber, templateName, parameters || []);
-        
-        return res.status(result.success ? 200 : 500).json(result);
-    } catch (error) {
-        console.error('❌ Error in test-wati endpoint:', error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
+            error: error.response?.data || error.message
         });
     }
 });
 
-// List templates endpoint
-app.get("/templates", (req, res) => {
-    const templates = Object.entries(eventTemplates).map(([eventType, config]) => ({
-        eventType,
-        templateName: config.templateName,
-        parameterFunction: config.parameters.toString()
-    }));
-    
-    res.status(200).json({ templates });
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error('❌ UNHANDLED ERROR IN MIDDLEWARE:', err);
-    res.status(500).json({ 
-        success: false,
-        message: "Internal server error",
-        error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+// ==== ADDITIONAL UTILITY ENDPOINTS ====
+// Test endpoint to check if server is running
+app.get("/health", (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Server is running",
+        version: "1.0.0",
+        supportedEvents: Object.keys(eventTemplates)
     });
 });
 
-// Catch-all route for undefined endpoints
-app.use((req, res) => {
-    console.warn(`⚠️ Attempted access to undefined route: ${req.method} ${req.url}`);
+// Test endpoint to manually send a WhatsApp message
+app.post("/test-wati", async (req, res) => {
+    try {
+        const { mobile, templateName, parameters } = req.body;
+        
+        if (!mobile || !templateName) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing required fields",
+                required: ["mobile", "templateName"]
+            });
+        }
+        
+        const whatsappNumber = formatWhatsappNumber(mobile);
+        const watiResponse = await sendWhatsappMessage(whatsappNumber, templateName, parameters || []);
+        
+        return res.status(200).json({
+            success: true,
+            message: "Test message sent successfully",
+            response: watiResponse
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Failed to send test message",
+            error: error.message
+        });
+    }
+});
+
+// List available templates
+app.get("/templates", (req, res) => {
+    const templates = Object.entries(eventTemplates).map(([event, config]) => ({
+        event,
+        templateName: config.templateName,
+        parameters: config.parameters({ user: {}, order: {} }).map(p => p.name)
+    }));
+    
+    res.status(200).json({
+        success: true,
+        templates
+    });
+});
+
+// ==== ERROR HANDLING ====
+// Catch 404 errors
+app.use((req, res, next) => {
     res.status(404).json({
         success: false,
         message: "Endpoint not found",
@@ -395,13 +333,20 @@ app.use((req, res) => {
     });
 });
 
-// ========== SERVER INITIALIZATION ==========
+// Global error handler
+app.use((err, req, res, next) => {
+    console.error('❌ Unhandled error:', err);
+    res.status(500).json({ 
+        success: false,
+        message: "Internal server error",
+        error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    });
+});
+
+// ==== START SERVER ====
 app.listen(PORT, () => {
-    console.log('==================================================');
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🌐 Webhook URL: https://whtsapp-web-hook.onrender.com/growcify-webhook`);
     console.log('⚙️ Environment:', process.env.NODE_ENV || 'development');
     console.log('✅ All required environment variables are set');
     console.log('📨 Supported event types:', Object.keys(eventTemplates).join(', '));
-    console.log('==================================================');
 });
