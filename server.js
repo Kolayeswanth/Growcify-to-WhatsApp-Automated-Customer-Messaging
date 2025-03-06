@@ -263,6 +263,11 @@ app.post("/growcify-webhook", async (req, res) => {
     }
 });
 
+app.post("/debug-webhook", (req, res) => {
+    console.log('DEBUG - Headers:', req.headers);
+    console.log('DEBUG - Body:', req.body);
+    res.status(200).send('OK');
+  });
 // ==== ADDITIONAL UTILITY ENDPOINTS ====
 // Test endpoint to check if server is running
 app.get("/health", (req, res) => {
