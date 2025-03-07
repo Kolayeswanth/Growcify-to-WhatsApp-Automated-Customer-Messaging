@@ -107,7 +107,7 @@ const eventTemplates = {
   },
 
   "user.signin": {
-    templateName: "bo_signin", // Changed from bo_signup to bo_signin
+    templateName: "bo_signin1",
     parameters: (data) => [
       { name: "name", value: data.user?.name || "Customer" },
       {
