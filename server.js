@@ -42,59 +42,64 @@ const eventTemplates = {
     ],
   },
   "order.placed": {
-        // Make sure this matches EXACTLY with the template name in WATI
-        templateName: "bo_order_placed", 
-        parameters: (data) => {
-            console.log("Processing order data:", JSON.stringify(data, null, 2));
-            
-            // Calculate total market price and savings
-            let totalMarketPrice = 0;
-            data.order?.items?.forEach(item => {
-                // Make sure we're accessing the right property for marketPrice
-                const itemMarketPrice = item.marketPrice || 0;
-                const itemQty = item.qty || 1;
-                totalMarketPrice += (itemMarketPrice * itemQty);
-            });
-            
-            const orderAmount = data.order?.amount || 0;
-            const savings = Math.max(0, totalMarketPrice - orderAmount);
-            
-            // Format items list - keep it simple for WhatsApp
-            let itemsList = '';
-            data.order?.items?.forEach(item => {
-                const itemName = item._id?.name || "Unknown Item";
-                const itemSize = item.size || "";
-                const itemUnit = item.unit || "";
-                const itemPrice = item.price || 0;
-                const itemQty = item.qty || 1;
-                
-                // Add each item to the list
-                itemsList += `• ${itemQty} x ${itemName} (${itemSize} ${itemUnit}) - ₹${itemPrice}\n`;
-            });
-            
-            console.log("Formatted items list:", itemsList);
-            console.log("Calculated savings:", savings);
-            
-            // Create date string from the timestamp
-            const orderDate = data.order?.createdAt ? 
-                new Date(data.order.createdAt).toLocaleDateString('en-IN') : 
-                new Date().toLocaleDateString('en-IN');
-            
-            // Format payment method
-            const paymentMethod = data.order?.paymentMethod === 'COD' ? 
-                'Cash on Delivery' : data.order?.paymentMethod || "Online Payment";
-            
-            return [
-                { name: "order_id", value: data.order?.oid?.toString() || "" },
-                { name: "customer_name", value: data.order?.user?.name || "Customer" },
-                { name: "date", value: orderDate },
-                { name: "amount", value: orderAmount.toString() },
-                { name: "payment_method", value: paymentMethod },
-                { name: "savings", value: savings.toString() },
-                { name: "items_list", value: itemsList.trim() }
-            ];
-        }
+    templateName: "bo_order_placed", 
+    parameters: (data) => {
+      console.log("Processing order data:", JSON.stringify(data, null, 2));
+
+      // Calculate total market price and savings
+      let totalMarketPrice = 0;
+      data.order?.items?.forEach((item) => {
+        const itemMarketPrice = item.marketPrice || 0;
+        const itemQty = item.qty || 1;
+        totalMarketPrice += itemMarketPrice * itemQty;
+      });
+
+      const orderAmount = data.order?.amount || 0;
+      const savings = Math.max(0, totalMarketPrice - orderAmount);
+
+      // Format items list with a simpler format
+      let itemsList = "";
+      if (data.order?.items && data.order.items.length > 0) {
+        data.order.items.forEach((item, index) => {
+          // Get the item name - handle both data structures
+          const itemName = item.name || (item._id ? item._id.name : "Item");
+          const itemSize = item.size || "";
+          const itemUnit = item.unit || "";
+          const itemPrice = item.price || 0;
+          const itemQty = item.qty || 1;
+
+          // Very simple format without special characters
+          itemsList += `${itemQty} x ${itemName} - Rs${itemPrice}\n`;
+        });
+      } else {
+        itemsList = "Your order items";
+      }
+
+      console.log("Formatted items list:", itemsList);
+      console.log("Calculated savings:", savings);
+
+      // Simple date format
+      const orderDate = data.order?.createdAt
+        ? new Date(data.order.createdAt).toLocaleDateString("en-IN")
+        : new Date().toLocaleDateString("en-IN");
+
+      // Payment method
+      const paymentMethod =
+        data.order?.paymentMethod === "COD"
+          ? "Cash on Delivery"
+          : data.order?.paymentMethod || "Online Payment";
+
+      return [
+        { name: "order_id", value: data.order?.oid?.toString() || "" },
+        { name: "customer_name", value: data.order?.user?.name || "Customer" },
+        { name: "date", value: orderDate },
+        { name: "amount", value: orderAmount.toString() },
+        { name: "payment_method", value: paymentMethod },
+        { name: "savings", value: savings.toString() },
+        { name: "items_list", value: itemsList.trim() },
+      ];
     },
+  },
   "order.cancelled": {
     templateName: "bo_order_cancelled",
     parameters: (data) => [
@@ -232,113 +237,115 @@ app.get("/test-wati/:template/:phone", async (req, res) => {
 
 app.post("/growcify-webhook", async (req, res) => {
   try {
-      console.log('📥 Received webhook payload:', JSON.stringify(req.body, null, 2));
-      
-      const { event, data } = req.body;
+    console.log(
+      "📥 Received webhook payload:",
+      JSON.stringify(req.body, null, 2)
+    );
 
-      if (!event || !data) {
-          console.error('❌ Missing required fields in webhook payload');
-          return res.status(400).json({ 
-              success: false,
-              message: "Missing required fields", 
-              required: ['event', 'data'] 
-          });
-      }
+    const { event, data } = req.body;
 
-      if (!eventTemplates[event]) {
-          console.warn('⚠️ Unhandled event type received:', event);
-          return res.status(400).json({ 
-              success: false,
-              message: "Unhandled event type",
-              receivedEvent: event 
-          });
-      }
-
-      // Extract mobile number based on event type
-      let mobileNumber = '';
-      
-      if (event.startsWith("user.")) {
-          mobileNumber = data.user?.mobile;
-          if (!mobileNumber) {
-              console.error('❌ Missing mobile number in user data');
-              return res.status(400).json({ 
-                  success: false,
-                  message: "Missing mobile number in user data" 
-              });
-          }
-      } 
-      else if (event.startsWith("order.")) {
-          // Extract mobile from order data structure
-          mobileNumber = data.order?.user?.mobile;
-          if (!mobileNumber) {
-              console.error('❌ Missing mobile number in order data');
-              return res.status(400).json({ 
-                  success: false,
-                  message: "Missing mobile number for order notifications" 
-              });
-          }
-      }
-
-      // Get the template configuration for this event
-      const templateConfig = eventTemplates[event];
-      const tenantId = process.env.TENANT_ID;
-      const watiToken = process.env.WATI_API_KEY;
-      
-      // Format the number properly with country code
-      const whatsappNumber = mobileNumber.startsWith('91') ? 
-          mobileNumber : `91${mobileNumber}`;
-
-      console.log(`👤 Processing ${event} event`);
-      console.log('🔑 Using tenant ID:', tenantId);
-      console.log('📱 Sending to WhatsApp number:', whatsappNumber);
-      console.log('📋 Using template:', templateConfig.templateName);
-
-      // Generate parameters for this event
-      const parameters = templateConfig.parameters(data);
-      console.log('📝 Template parameters:', JSON.stringify(parameters, null, 2));
-
-      // Properly formatted URL with path parameter (tenantId) and query parameter (whatsappNumber)
-      const watiApiUrl = `https://live-mt-server.wati.io/${tenantId}/api/v1/sendTemplateMessage?whatsappNumber=${whatsappNumber}`;
-
-      // Properly formatted payload according to the schema
-      const payload = {
-          template_name: templateConfig.templateName,
-          broadcast_name: "testing",
-          parameters: parameters
-      };
-
-      console.log('📤 Sending request to WATI API:', {
-          url: watiApiUrl,
-          payload: JSON.stringify(payload, null, 2)
+    if (!event || !data) {
+      console.error("❌ Missing required fields in webhook payload");
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields",
+        required: ["event", "data"],
       });
+    }
 
-      const response = await axios.post(watiApiUrl, payload, {
-          headers: {
-              "Authorization": `Bearer ${watiToken}`,
-              "Content-Type": "application/json"
-          }
+    if (!eventTemplates[event]) {
+      console.warn("⚠️ Unhandled event type received:", event);
+      return res.status(400).json({
+        success: false,
+        message: "Unhandled event type",
+        receivedEvent: event,
       });
+    }
 
-      console.log('✅ WATI API Response:', response.data);
-      return res.status(200).json({ 
-          success: true, 
-          message: "WhatsApp message sent successfully!",
-          event: event,
-          response: response.data
-      });
+    // Extract mobile number based on event type
+    let mobileNumber = "";
 
-  } catch (error) {
-      console.error('❌ Error details:', {
-          message: error.message,
-          response: error.response?.data,
-          stack: error.stack
-      });
-
-      res.status(500).json({ 
+    if (event.startsWith("user.")) {
+      mobileNumber = data.user?.mobile;
+      if (!mobileNumber) {
+        console.error("❌ Missing mobile number in user data");
+        return res.status(400).json({
           success: false,
-          message: "Internal server error",
-          error: error.response?.data || error.message
-      });
+          message: "Missing mobile number in user data",
+        });
+      }
+    } else if (event.startsWith("order.")) {
+      // Extract mobile from order data structure
+      mobileNumber = data.order?.user?.mobile;
+      if (!mobileNumber) {
+        console.error("❌ Missing mobile number in order data");
+        return res.status(400).json({
+          success: false,
+          message: "Missing mobile number for order notifications",
+        });
+      }
+    }
+
+    // Get the template configuration for this event
+    const templateConfig = eventTemplates[event];
+    const tenantId = process.env.TENANT_ID;
+    const watiToken = process.env.WATI_API_KEY;
+
+    // Format the number properly with country code
+    const whatsappNumber = mobileNumber.startsWith("91")
+      ? mobileNumber
+      : `91${mobileNumber}`;
+
+    console.log(`👤 Processing ${event} event`);
+    console.log("🔑 Using tenant ID:", tenantId);
+    console.log("📱 Sending to WhatsApp number:", whatsappNumber);
+    console.log("📋 Using template:", templateConfig.templateName);
+
+    // Generate parameters for this event
+    const parameters = templateConfig.parameters(data);
+    console.log("📝 Template parameters:", JSON.stringify(parameters, null, 2));
+
+    // Properly formatted URL with path parameter (tenantId) and query parameter (whatsappNumber)
+    const watiApiUrl = `https://live-mt-server.wati.io/${tenantId}/api/v1/sendTemplateMessage?whatsappNumber=${whatsappNumber}`;
+
+    // Properly formatted payload according to the schema
+    const payload = {
+      template_name: templateConfig.templateName,
+      broadcast_name: "testing",
+      parameters: parameters,
+    };
+
+    console.log("📤 Sending request to WATI API:", {
+      url: watiApiUrl,
+      payload: JSON.stringify(payload, null, 2),
+    });
+
+    const response = await axios.post(watiApiUrl, payload, {
+      headers: {
+        Authorization: `Bearer ${watiToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    console.log("✅ WATI API Response:", response.data);
+    return res.status(200).json({
+      success: true,
+      message: "WhatsApp message sent successfully!",
+      event: event,
+      response: response.data,
+    });
+  } catch (error) {
+    console.error("❌ Error details:", {
+      message: error.message,
+      response: error.response?.data,
+      stack: error.stack,
+    });
+
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.response?.data || error.message,
+    });
   }
 });
 
