@@ -27,6 +27,9 @@ const PORT = process.env.PORT || 5000;
 app.use((req, res, next) => {
     console.log(`📝 [${new Date().toISOString()}] ${req.method} ${req.url}`);
     console.log('📤 Request Headers:', JSON.stringify(req.headers, null, 2));
+    if (req.method === 'POST') {
+        console.log('📥 Request Body:', JSON.stringify(req.body, null, 2));
+      }
     next();
 });
 
