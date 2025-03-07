@@ -95,6 +95,7 @@ const eventTemplates = {
     ],
   },
 
+  
   "user.signin": {
     templateName: "bo_signin1",
     parameters: (data) => [
