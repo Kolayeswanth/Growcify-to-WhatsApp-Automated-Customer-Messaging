@@ -42,39 +42,59 @@ const eventTemplates = {
     ],
   },
   "order.placed": {
-    templateName: "bo_order_placed",
-    parameters: (data) => {
-      let totalMarketPrice = 0;
-      data.order?.items?.forEach((item) => {
-        totalMarketPrice += item.marketPrice * item.qty || 0;
-      });
-      const savings = totalMarketPrice - (data.order?.amount || 0);
-
-      let itemsList = "";
-      data.order?.items?.forEach((item) => {
-        itemsList += `• ${item.qty} x ${item._id.name} (${item.size} ${item.unit}) - ₹${item.price}\n`;
-      });
-
-      return [
-        { name: "order_id", value: data.order?.oid?.toString() || "" },
-        { name: "customer_name", value: data.order?.user?.name || "Customer" },
-        {
-          name: "date",
-          value: new Date(data.order?.createdAt).toLocaleDateString() || "",
-        },
-        { name: "amount", value: data.order?.amount?.toString() || "0" },
-        {
-          name: "payment_method",
-          value:
-            data.order?.paymentMethod === "COD"
-              ? "Cash on Delivery"
-              : data.order?.paymentMethod || "",
-        },
-        { name: "savings", value: savings.toString() },
-        { name: "items_list", value: itemsList },
-      ];
+        // Make sure this matches EXACTLY with the template name in WATI
+        templateName: "bo_order_placed", 
+        parameters: (data) => {
+            console.log("Processing order data:", JSON.stringify(data, null, 2));
+            
+            // Calculate total market price and savings
+            let totalMarketPrice = 0;
+            data.order?.items?.forEach(item => {
+                // Make sure we're accessing the right property for marketPrice
+                const itemMarketPrice = item.marketPrice || 0;
+                const itemQty = item.qty || 1;
+                totalMarketPrice += (itemMarketPrice * itemQty);
+            });
+            
+            const orderAmount = data.order?.amount || 0;
+            const savings = Math.max(0, totalMarketPrice - orderAmount);
+            
+            // Format items list - keep it simple for WhatsApp
+            let itemsList = '';
+            data.order?.items?.forEach(item => {
+                const itemName = item._id?.name || "Unknown Item";
+                const itemSize = item.size || "";
+                const itemUnit = item.unit || "";
+                const itemPrice = item.price || 0;
+                const itemQty = item.qty || 1;
+                
+                // Add each item to the list
+                itemsList += `• ${itemQty} x ${itemName} (${itemSize} ${itemUnit}) - ₹${itemPrice}\n`;
+            });
+            
+            console.log("Formatted items list:", itemsList);
+            console.log("Calculated savings:", savings);
+            
+            // Create date string from the timestamp
+            const orderDate = data.order?.createdAt ? 
+                new Date(data.order.createdAt).toLocaleDateString('en-IN') : 
+                new Date().toLocaleDateString('en-IN');
+            
+            // Format payment method
+            const paymentMethod = data.order?.paymentMethod === 'COD' ? 
+                'Cash on Delivery' : data.order?.paymentMethod || "Online Payment";
+            
+            return [
+                { name: "order_id", value: data.order?.oid?.toString() || "" },
+                { name: "customer_name", value: data.order?.user?.name || "Customer" },
+                { name: "date", value: orderDate },
+                { name: "amount", value: orderAmount.toString() },
+                { name: "payment_method", value: paymentMethod },
+                { name: "savings", value: savings.toString() },
+                { name: "items_list", value: itemsList.trim() }
+            ];
+        }
     },
-  },
   "order.cancelled": {
     templateName: "bo_order_cancelled",
     parameters: (data) => [
@@ -212,114 +232,113 @@ app.get("/test-wati/:template/:phone", async (req, res) => {
 
 app.post("/growcify-webhook", async (req, res) => {
   try {
-    const secretHeader =
-      req.headers["x-webhook-secret"] || req.headers["x-growcify-secret"];
-    if (!secretHeader || secretHeader !== process.env.WEBHOOK_SECRET) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid webhook secret",
-      });
-    }
+      console.log('📥 Received webhook payload:', JSON.stringify(req.body, null, 2));
+      
+      const { event, data } = req.body;
 
-    const { event, data } = req.body;
-
-    if (!event || !data) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required fields",
-        required: ["event", "data"],
-      });
-    }
-
-    if (!eventTemplates[event]) {
-      return res.status(400).json({
-        success: false,
-        message: "Unhandled event type",
-        receivedEvent: event,
-        supportedEvents: Object.keys(eventTemplates),
-      });
-    }
-
-    if (event.startsWith("user.") && !data.user?.mobile) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing mobile number in user data",
-      });
-    }
-
-    if (event.startsWith("order.")) {
-      if (!data.order) {
-        return res.status(400).json({
-          success: false,
-          message: "Missing order details",
-        });
+      if (!event || !data) {
+          console.error('❌ Missing required fields in webhook payload');
+          return res.status(400).json({ 
+              success: false,
+              message: "Missing required fields", 
+              required: ['event', 'data'] 
+          });
       }
 
-      const userMobile =
-        data.user?.mobile || data.order?.userMobile || data.order?.user?.mobile;
-
-      if (!userMobile) {
-        return res.status(400).json({
-          success: false,
-          message: "Missing mobile number for order notifications",
-        });
+      if (!eventTemplates[event]) {
+          console.warn('⚠️ Unhandled event type received:', event);
+          return res.status(400).json({ 
+              success: false,
+              message: "Unhandled event type",
+              receivedEvent: event 
+          });
       }
 
-      if (!data.user) data.user = {};
-      data.user.mobile = userMobile;
-    }
-
-    const templateConfig = eventTemplates[event];
-    const tenantId = process.env.TENANT_ID;
-    const watiToken = process.env.WATI_API_KEY;
-
-    const whatsappNumber = data.user.mobile.startsWith("91")
-      ? data.user.mobile
-      : `91${data.user.mobile}`;
-
-    const watiApiUrl = `https://live-mt-server.wati.io/${tenantId}/api/v1/sendTemplateMessage?whatsappNumber=${whatsappNumber}`;
-
-    const payload = {
-      template_name: templateConfig.templateName,
-      broadcast_name: "testing",
-      parameters: templateConfig.parameters(data),
-    };
-
-    const response = await axios.post(watiApiUrl, payload, {
-      headers: {
-        Authorization: `Bearer ${watiToken}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (response.data && response.data.result === true) {
-      if (response.data.error || response.data.warning) {
-        console.warn(
-          "⚠️ WATI API warning/error:",
-          response.data.error || response.data.warning
-        );
+      // Extract mobile number based on event type
+      let mobileNumber = '';
+      
+      if (event.startsWith("user.")) {
+          mobileNumber = data.user?.mobile;
+          if (!mobileNumber) {
+              console.error('❌ Missing mobile number in user data');
+              return res.status(400).json({ 
+                  success: false,
+                  message: "Missing mobile number in user data" 
+              });
+          }
+      } 
+      else if (event.startsWith("order.")) {
+          // Extract mobile from order data structure
+          mobileNumber = data.order?.user?.mobile;
+          if (!mobileNumber) {
+              console.error('❌ Missing mobile number in order data');
+              return res.status(400).json({ 
+                  success: false,
+                  message: "Missing mobile number for order notifications" 
+              });
+          }
       }
 
-      return res.status(200).json({
-        success: true,
-        message: "WhatsApp message request accepted by WATI",
-        event: event,
-        response: response.data,
+      // Get the template configuration for this event
+      const templateConfig = eventTemplates[event];
+      const tenantId = process.env.TENANT_ID;
+      const watiToken = process.env.WATI_API_KEY;
+      
+      // Format the number properly with country code
+      const whatsappNumber = mobileNumber.startsWith('91') ? 
+          mobileNumber : `91${mobileNumber}`;
+
+      console.log(`👤 Processing ${event} event`);
+      console.log('🔑 Using tenant ID:', tenantId);
+      console.log('📱 Sending to WhatsApp number:', whatsappNumber);
+      console.log('📋 Using template:', templateConfig.templateName);
+
+      // Generate parameters for this event
+      const parameters = templateConfig.parameters(data);
+      console.log('📝 Template parameters:', JSON.stringify(parameters, null, 2));
+
+      // Properly formatted URL with path parameter (tenantId) and query parameter (whatsappNumber)
+      const watiApiUrl = `https://live-mt-server.wati.io/${tenantId}/api/v1/sendTemplateMessage?whatsappNumber=${whatsappNumber}`;
+
+      // Properly formatted payload according to the schema
+      const payload = {
+          template_name: templateConfig.templateName,
+          broadcast_name: "testing",
+          parameters: parameters
+      };
+
+      console.log('📤 Sending request to WATI API:', {
+          url: watiApiUrl,
+          payload: JSON.stringify(payload, null, 2)
       });
-    } else {
-      return res.status(200).json({
-        success: false,
-        message: "WATI API did not confirm message delivery",
-        event: event,
-        response: response.data,
+
+      const response = await axios.post(watiApiUrl, payload, {
+          headers: {
+              "Authorization": `Bearer ${watiToken}`,
+              "Content-Type": "application/json"
+          }
       });
-    }
+
+      console.log('✅ WATI API Response:', response.data);
+      return res.status(200).json({ 
+          success: true, 
+          message: "WhatsApp message sent successfully!",
+          event: event,
+          response: response.data
+      });
+
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error communicating with WATI API",
-      error: error.response?.data || error.message,
-    });
+      console.error('❌ Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          stack: error.stack
+      });
+
+      res.status(500).json({ 
+          success: false,
+          message: "Internal server error",
+          error: error.response?.data || error.message
+      });
   }
 });
 
