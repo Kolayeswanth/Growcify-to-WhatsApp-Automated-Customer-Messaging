@@ -142,6 +142,17 @@ const eventTemplates = {
       },
     ],
   },
+
+  "order.delivered": {
+    templateName: "bo_order_delivered",
+    parameters: (data) => [
+      { name: "order_id", value: data.order?.oid?.toString() || "" },
+      { name: "customer_name", value: data.order?.user?.name || "Customer" },
+      { name: "date", value: new Date(data.order?.createdAt).toLocaleDateString() || "" },
+      { name: "amount", value: data.order?.amount?.toString() || "0" },
+      { name: "delivery_date", value: new Date().toLocaleDateString() }
+  ],
+  },
 };
 
 // Health endpoint
