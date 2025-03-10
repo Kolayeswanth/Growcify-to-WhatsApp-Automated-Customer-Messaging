@@ -78,6 +78,31 @@ Configure your e-commerce platform to send webhook events to:
 ```
 https://your-domain.com/webhook
 ```
+## API Endpoints
+
+### Health Check
+```
+GET /health
+```
+Verifies the server is running.
+
+### Test Webhook Event
+```
+GET /test-webhook/:event
+```
+Get sample payload for a specific event type.
+
+### Test WATI Integration
+```
+GET /test-wati/:template/:phone
+```
+Send a test message to a specific phone number using a template.
+
+### Main Webhook Endpoint
+```
+POST /growcify-webhook
+```
+Receives webhook events and processes them.
 
 ## Template Examples
 
