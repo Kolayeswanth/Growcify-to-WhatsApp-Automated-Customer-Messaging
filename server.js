@@ -31,7 +31,7 @@ app.use(bodyParser.json());
 
 const eventTemplates = {
   "user.signup": {
-    templateName: "bo_signup",
+    templateName: "bo_signup1",
     parameters: (data) => [
       { name: "name", value: data.user?.name || "Customer" },
       {
@@ -42,7 +42,7 @@ const eventTemplates = {
     ],
   },
   "order.placed": {
-    templateName: "bo_order_placed", 
+    templateName: "bo_order_placed1", 
     parameters: (data) => {
       console.log("Processing order data:", JSON.stringify(data, null, 2));
 
@@ -101,7 +101,7 @@ const eventTemplates = {
     },
   },
   "order.cancelled": {
-    templateName: "bo_order_cancelled",
+    templateName: "bo_order_cancelled1",
     parameters: (data) => [
       { name: "order_id", value: data.order?.oid?.toString() || "" },
       { name: "customer_name", value: data.order?.user?.name || "Customer" },
@@ -121,7 +121,7 @@ const eventTemplates = {
   },
 
   "user.signin": {
-    templateName: "bo_signin1",
+    templateName: "bo_signin2",
     parameters: (data) => [
       { name: "name", value: data.user?.name || "Customer" },
       {
