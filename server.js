@@ -57,7 +57,7 @@ const eventTemplates = {
       const orderAmount = data.order?.amount || 0;
       const savings = Math.max(0, totalMarketPrice - orderAmount);
 
-      // Format items list with a simpler format
+      // Format items list with a simpler format - FIX: Replace newlines with commas and spaces
       let itemsList = "";
       if (data.order?.items && data.order.items.length > 0) {
         data.order.items.forEach((item, index) => {
@@ -68,8 +68,12 @@ const eventTemplates = {
           const itemPrice = item.price || 0;
           const itemQty = item.qty || 1;
 
-          // Very simple format without special characters
-          itemsList += `${itemQty} x ${itemName} - Rs${itemPrice}\n`;
+          // Add a comma and space between items instead of newline
+          if (index > 0) {
+            itemsList += ", ";
+          }
+          // Very simple format without special characters or newlines
+          itemsList += `${itemQty} x ${itemName} - Rs${itemPrice}`;
         });
       } else {
         itemsList = "Your order items";
@@ -202,8 +206,7 @@ app.get("/test-wati/:template/:phone", async (req, res) => {
         { name: "savings", value: "200" },
         {
           name: "items_list",
-          value:
-            "• 2 x Test Product (500g) - ₹500\n• 1 x Another Item (1kg) - ₹500",
+          value: "2 x Test Product - Rs500, 1 x Another Item - Rs500", // Fixed: no newlines
         },
       ];
     }
@@ -304,9 +307,15 @@ app.post("/growcify-webhook", async (req, res) => {
     // Generate parameters for this event
     const parameters = templateConfig.parameters(data);
     console.log("📝 Template parameters:", JSON.stringify(parameters, null, 2));
+    
+    // Fix for validWhatsAppNumber=false issue
+    let formattedWhatsAppNumber = whatsappNumber;
+    if (formattedWhatsAppNumber.startsWith("+")) {
+      formattedWhatsAppNumber = formattedWhatsAppNumber.substring(1);
+    }
 
     // Properly formatted URL with path parameter (tenantId) and query parameter (whatsappNumber)
-    const watiApiUrl = `https://live-mt-server.wati.io/${tenantId}/api/v1/sendTemplateMessage?whatsappNumber=${whatsappNumber}`;
+    const watiApiUrl = `https://live-mt-server.wati.io/${tenantId}/api/v1/sendTemplateMessage?whatsappNumber=${formattedWhatsAppNumber}`;
 
     // Properly formatted payload according to the schema
     const payload = {
