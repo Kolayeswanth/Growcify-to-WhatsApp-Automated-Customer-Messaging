@@ -20,8 +20,6 @@ This integration handles the following webhook events:
 
 - **Order Events**
   - `order.placed`: When a customer places an order
-  - `order.accepted`: When a store accepts an order
-  - `order.shipped`: When an order is shipped
   - `order.delivered`: When an order is delivered
   - `order.cancelled`: When an order is cancelled
 
@@ -38,7 +36,7 @@ This integration handles the following webhook events:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/webhook-to-wati.git
+git clone https://github.com/kolayeswanth/whatsapp-web-hook.git
 cd webhook-to-wati
 ```
 
@@ -51,7 +49,8 @@ npm install
 ```
 PORT=3000
 WATI_ACCESS_TOKEN=your_wati_access_token
-WATI_BASE_URL=https://api.wati.io/api/v1
+TENANT_ID=your_wati_tenant_id
+WEBHOOK_SECRET=your_webhook_secret
 ```
 
 4. Start the server:
@@ -69,8 +68,6 @@ Before using this integration, you need to create templates in your WATI dashboa
    - user_signup
    - user_signin
    - order_placed
-   - order_accepted
-   - order_shipped
    - order_delivered
    - order_cancelled
 4. Use the placeholders shown in the template examples (e.g., {{name}}, {{order_id}})
@@ -81,6 +78,31 @@ Configure your e-commerce platform to send webhook events to:
 ```
 https://your-domain.com/webhook
 ```
+## API Endpoints
+
+### Health Check
+```
+GET /health
+```
+Verifies the server is running.
+
+### Test Webhook Event
+```
+GET /test-webhook/:event
+```
+Get sample payload for a specific event type.
+
+### Test WATI Integration
+```
+GET /test-wati/:template/:phone
+```
+Send a test message to a specific phone number using a template.
+
+### Main Webhook Endpoint
+```
+POST /growcify-webhook
+```
+Receives webhook events and processes them.
 
 ## Template Examples
 
