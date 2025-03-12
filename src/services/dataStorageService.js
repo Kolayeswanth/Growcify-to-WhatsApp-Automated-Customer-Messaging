@@ -17,9 +17,7 @@ class DataStorageService {
     this.initialized = false;
   }
 
-  /**
-   * Initialize connection to Google Sheets
-   */
+ 
   async initialize() {
     try {
       // Create a new document using service account credentials
