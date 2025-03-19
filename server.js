@@ -3,9 +3,11 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 
 const { config, validateConfig } = require("./src/config");
+const { connectDB } = require("./src/config/db");
 const webhookService = require("./src/services/webhook");
 const watiService = require("./src/services/watiService");
 const eventTemplates = require("./src/templates/templateConfig");
+const analyticsRoutes = require("./src/routes/analytics");
 
 // Validate environment variables
 validateConfig();
@@ -17,10 +19,18 @@ const PORT = config.port;
 // Parse JSON bodies
 app.use(bodyParser.json());
 
+// Connect to MongoDB
+connectDB().then(() => {
+  console.log('✅ Ready to store webhook data in MongoDB');
+});
+
 // Health endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({ success: true, message: "Server is running" });
 });
+
+// Analytics routes
+app.use("/api/analytics", analyticsRoutes);
 
 // Mock event endpoint for testing
 app.get("/test-webhook/:event", (req, res) => {
