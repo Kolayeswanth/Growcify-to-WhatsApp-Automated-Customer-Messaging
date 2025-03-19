@@ -147,19 +147,22 @@ router.get('/users', async (req, res) => {
       ]),
       Order.aggregate([
         {
+          $match: { status: { $ne: "cancelled" } }  // Exclude canceled orders
+        },
+        {
           $group: {
             _id: "$user.userId",
             userName: { $first: "$user.name" },
             userEmail: { $first: "$user.email" },
             userMobile: { $first: "$user.mobile" },
             orderCount: { $sum: 1 },
-            totalSpent: { $sum: "$amount" },
+            totalSpent: { $sum: "$amount" },   // Now only sums non-canceled orders
             avgOrderValue: { $avg: "$amount" }
           }
         },
         { $sort: { totalSpent: -1 } },
         { $limit: 10 }
-      ])
+      ])      
     ]);
 
     res.status(200).json({
