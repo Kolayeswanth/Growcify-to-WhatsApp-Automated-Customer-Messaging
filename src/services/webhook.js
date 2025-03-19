@@ -2,30 +2,6 @@ const eventTemplates = require('../templates/templateConfig');
 const watiService = require('./watiService');
 const Order = require('../models/Order');
 const User = require('../models/User');
-const WebhookEvent = require('../models/WebhookEvent');
-
-/**
- * Store raw webhook event in database
- * @param {string} eventType - Type of event
- * @param {object} payload - Full webhook payload
- * @returns {Promise} Stored event
- */
-const storeWebhookEvent = async (eventType, payload) => {
-  try {
-    const event = new WebhookEvent({
-      eventType,
-      payload,
-      processed: true
-    });
-    await event.save();
-    console.log(`📝 Raw webhook event stored: ${eventType}`);
-    return event;
-  } catch (error) {
-    console.error(`❌ Error storing webhook event: ${error.message}`);
-    // Don't throw here - we want processing to continue even if storage fails
-    return null;
-  }
-};
 
 /**
  * Store order data in database
@@ -142,9 +118,6 @@ const processWebhook = async (webhookData) => {
     console.warn("⚠️ Unhandled event type received:", event);
     throw new Error(`Unhandled event type: ${event}`);
   }
-
-  // Store raw webhook event first
-  await storeWebhookEvent(event, webhookData);
   
   // Store data in database based on event type
   if (event.startsWith("order.")) {

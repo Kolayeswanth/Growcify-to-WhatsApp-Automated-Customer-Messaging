@@ -3,7 +3,6 @@ const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
 const User = require('../models/User');
-const WebhookEvent = require('../models/WebhookEvent');
 
 // Get overall stats dashboard 
 router.get('/dashboard', async (req, res) => {
@@ -18,7 +17,6 @@ router.get('/dashboard', async (req, res) => {
     ] = await Promise.all([
       Order.countDocuments(),
       User.countDocuments(),
-      WebhookEvent.countDocuments(),
       Order.aggregate([
         { $group: { _id: null, total: { $sum: "$amount" } } }
       ]),
