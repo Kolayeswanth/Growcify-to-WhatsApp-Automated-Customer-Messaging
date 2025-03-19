@@ -6,7 +6,8 @@ const config = {
   tenantId: process.env.TENANT_ID,
   watiApiKey: process.env.WATI_API_KEY,
   webhookSecret: process.env.WEBHOOK_SECRET,
-  watiApiBaseUrl: "https://live-mt-server.wati.io"
+  watiApiBaseUrl: "https://live-mt-server.wati.io",
+  mongoUri: process.env.MONGO_URI || "mongodb://localhost:27017/webhook-to-wati"
 };
 
 // Validate required environment variables
@@ -15,6 +16,7 @@ const validateConfig = () => {
     TENANT_ID: config.tenantId,
     WATI_API_KEY: config.watiApiKey,
     WEBHOOK_SECRET: config.webhookSecret,
+    MONGO_URI: config.mongoUri
   };
 
   const missingVars = Object.entries(requiredEnvVars)
