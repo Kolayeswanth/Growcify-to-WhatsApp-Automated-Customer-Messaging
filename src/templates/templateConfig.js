@@ -17,20 +17,11 @@ const eventTemplates = {
   },
   
   "order.placed": {
-    templateName: "bo_order_placed1", 
+    templateName: "bo_order_placed2", 
     parameters: (data) => {
       console.log("Processing order data:", JSON.stringify(data, null, 2));
 
-      // Calculate total market price and savings
-      let totalMarketPrice = 0;
-      data.order?.items?.forEach((item) => {
-        const itemMarketPrice = item.marketPrice || 0;
-        const itemQty = item.qty || 1;
-        totalMarketPrice += itemMarketPrice * itemQty;
-      });
-
       const orderAmount = data.order?.amount || 0;
-      const savings = Math.max(0, totalMarketPrice - orderAmount);
 
       // Format items list with a simpler format - replacing newlines with commas and spaces
       let itemsList = "";
@@ -55,7 +46,6 @@ const eventTemplates = {
       }
 
       console.log("Formatted items list:", itemsList);
-      console.log("Calculated savings:", savings);
 
       // Simple date format
       const orderDate = formatDate(data.order?.createdAt);
@@ -72,7 +62,6 @@ const eventTemplates = {
         { name: "date", value: orderDate },
         { name: "amount", value: orderAmount.toString() },
         { name: "payment_method", value: paymentMethod },
-        { name: "savings", value: savings.toString() },
         { name: "items_list", value: itemsList.trim() },
       ];
     },
