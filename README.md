@@ -1,191 +1,156 @@
-Webhook to WATI Integration
+Growcify → WhatsApp (WATI) Automated Customer Messaging
 
-A Node.js application that processes webhook events from an e-commerce platform and sends personalized WhatsApp notifications to customers through the WATI API. This integration enables real-time customer communication for order updates, user account events, and promotional messages.
+A Node.js service that listens to Growcify-style ecommerce webhooks and sends real-time, personalized WhatsApp template messages via WATI. It also stores orders and users in MongoDB and exposes analytics endpoints.
 
-## Features
+## What it does
 
-- **Webhook Endpoint**: Receives webhook events from your e-commerce platform
-- **Event Processing**: Handles various types of events (orders, user accounts)
-- **WATI Integration**: Sends customized WhatsApp template messages based on event type
-- **Templating System**: Configurable templates with dynamic parameters
-- **Error Handling**: Robust error handling and logging
+- Receives webhook events at `POST /growcify-webhook`
+- Maps each event to a WATI-approved WhatsApp template and fills dynamic parameters
+- Sends the message using WATI's API
+- Persists orders and users to MongoDB for reporting
+- Provides basic analytics APIs (dashboard, orders, products, users)
 
-## Supported Events
+## Supported events → templates
 
-This integration handles the following webhook events:
+- user.signup → template: `bo_signup1`
+- user.signin → template: `bo_signin2`
+- order.placed → template: `bo_order_placed2`
+- order.cancelled → template: `bo_order_cancelled1`
+- order.delivered → template: `bo_order_delivered`
 
-- **User Events**
-  - `user.signup`: When a new user registers
-  - `user.signin`: When a user logs in
+Parameter names are exactly as used by WATI in `src/templates/templateConfig.js`.
 
-- **Order Events**
-  - `order.placed`: When a customer places an order
-  - `order.delivered`: When an order is delivered
-  - `order.cancelled`: When an order is cancelled
+## Requirements
 
-## Getting Started
+- Node.js 14+ and npm
+- MongoDB (local or hosted)
+- WATI business account (tenant + API key)
 
-### Prerequisites
+## Environment variables (.env)
 
-- Node.js (v14 or later)
-- npm or yarn
-- A WATI Business account
-- Access to your e-commerce platform's webhook settings
+These are validated on startup:
 
-### Installation
+- PORT=5000 (optional)
+- TENANT_ID=your_wati_tenant_id
+- WATI_API_KEY=your_wati_api_key
+- WEBHOOK_SECRET=your_webhook_secret  (required, reserved for request verification)
+- MONGO_URI=mongodb://localhost:27017/webhook-to-wati
 
-1. Clone the repository:
-```bash
-git clone https://github.com/kolayeswanth/whatsapp-web-hook.git
-cd webhook-to-wati
-```
+Note: The service sends via `https://live-mt-server.wati.io/{TENANT_ID}/api/v1/sendTemplateMessage`.
 
-2. Install dependencies:
-```bash
+## Run locally
+
+1) Install dependencies
+2) Create `.env` as above
+3) Start the server
+
+On Windows PowerShell:
+
+```powershell
 npm install
-```
-
-3. Create a `.env` file with your configuration:
-```
-PORT=3000
-WATI_ACCESS_TOKEN=your_wati_access_token
-TENANT_ID=your_wati_tenant_id
-WEBHOOK_SECRET=your_webhook_secret
-```
-
-4. Start the server:
-```bash
 npm start
 ```
 
-### WATI Template Setup
+Dev mode with auto-reload:
 
-Before using this integration, you need to create templates in your WATI dashboard:
-
-1. Go to your WATI dashboard
-2. Navigate to Templates section
-3. Create templates with names matching those in the configuration:
-   - user_signup
-   - user_signin
-   - order_placed
-   - order_delivered
-   - order_cancelled
-4. Use the placeholders shown in the template examples (e.g., {{name}}, {{order_id}})
-
-### Webhook Configuration
-
-Configure your e-commerce platform to send webhook events to:
-```
-https://your-domain.com/webhook
-```
-## API Endpoints
-
-### Health Check
-```
-GET /health
-```
-Verifies the server is running.
-
-### Test Webhook Event
-```
-GET /test-webhook/:event
-```
-Get sample payload for a specific event type.
-
-### Test WATI Integration
-```
-GET /test-wati/:template/:phone
-```
-Send a test message to a specific phone number using a template.
-
-### Main Webhook Endpoint
-```
-POST /growcify-webhook
-```
-Receives webhook events and processes them.
-
-## Template Examples
-
-### User Signup Template
-```
-🎉 *Welcome to the Family, {{name}}!* 🎉
-
-Thank you for joining us! Your account has been successfully created.
-
-*Your Details:*
-📱 Mobile: {{mobile}}
-📧 Email: {{email}}
-🎁 Referral Code: {{referral_code}}
-
-Use your referral code to invite friends and earn exciting rewards!
+```powershell
+npm run dev
 ```
 
-### Order Placed Template
-```
-🛒 *Order Confirmed!* #{{order_id}}
+## API endpoints
 
-Dear {{customer_name}},
+- GET /health → server status
+- POST /growcify-webhook → main webhook receiver
+- GET /test-webhook/:event → sample payload for an event (`user.signup`, `user.signin`, `order.placed`, `order.cancelled`, `order.delivered`)
+- GET /test-wati/:template/:phone → send a test WhatsApp message using a template name to a phone
 
-Thank you for placing your order with us. We're processing it right away!
+Analytics:
+- GET /api/analytics/dashboard
+- GET /api/analytics/orders
+- GET /api/analytics/products
+- GET /api/analytics/users
 
-*Order Details:*
-📆 Date: {{date}}
-🧾 Order ID: #{{order_id}}
-💰 Total Amount: ₹{{amount}}
-💵 Payment Method: {{payment_method}}
-🚚 Delivery Mode: {{delivery_mode}}
-💸 You Saved: ₹{{savings}}
+## Payload shape (examples)
 
-*Your Items:*
-{{items_list}}
+user.signup:
 
-We will notify you once your order is accepted. Thank you for shopping with us!
-```
-
-## Project Structure
-
-```
-webhook-to-wati/
-├── src/
-│   ├── config/
-│   │   └── index.js         # Configuration settings
-│   ├── services/
-│   │   ├── webhook.js       # Webhook processing logic
-│   │   └── watiService.js   # WATI API integration
-│   ├── templates/
-│   │   └── templateConfig.js # Template configurations
-│   └── utils/
-│       └── helpers.js       # Utility functions
-├── .env                     # Environment variables
-├── .gitignore
-├── package.json
-├── README.md
-└── server.js               # Entry point
+```json
+{
+  "event": "user.signup",
+  "data": {
+    "user": {
+      "_id": "user_123",
+      "name": "Test User",
+      "mobile": "9876543210",
+      "email": "test@example.com",
+      "callingCode": "91",
+      "referralCode": "ABCD12"
+    }
+  }
+}
 ```
 
-## Customization
+order.placed:
 
-### Adding New Event Types
+```json
+{
+  "event": "order.placed",
+  "data": {
+    "order": {
+      "_id": "order_123",
+      "oid": 123456,
+      "amount": 170,
+      "paymentMethod": "COD",
+      "deliveryMode": "home-delivery",
+      "items": [
+        { "_id": { "_id": "prod_1", "name": "Carrot", "externalID": 5005 }, "qty": 1, "price": 50, "unit": "kg" },
+        { "_id": { "_id": "prod_2", "name": "Apple",  "externalID": 5025 }, "qty": 2, "price": 60, "unit": "kg" }
+      ],
+      "user": { "_id": "user_123", "name": "Test User", "mobile": "9876543210", "email": "test@example.com" }
+    }
+  }
+}
+```
 
-To add a new event type:
+## Template parameters (by event)
 
-1. Add a new template configuration in `src/templates/templateConfig.js`
-2. Create the corresponding template in your WATI dashboard
-3. Update the webhook handler in `src/services/webhook.js` if necessary
+Defined in `src/templates/templateConfig.js`:
 
-### Modifying Templates
+- user.signup: name, mobile, referral_code
+- user.signin: name, mobile, last_login
+- order.placed: order_id, customer_name, date, amount, payment_method, items_list
+- order.cancelled: order_id, customer_name, date, cancellation_reason, refund_status
+- order.delivered: order_id, customer_name, date, amount, delivery_date
 
-To modify an existing template:
+## Data storage
 
-1. Update the template in your WATI dashboard
-2. Update the corresponding parameters in the template configuration
+- Orders saved in MongoDB (`src/models/Order.js`)
+- Users saved in MongoDB (`src/models/User.js`)
 
-## License
+## Phone number formatting
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+Outbound WhatsApp numbers are normalized to Indian format: it strips a leading `+` and prefixes `91` if missing (see `src/utils/helpers.js`). Ensure input numbers are valid.
 
-## Acknowledgments
+## Notes & limitations
 
-- [WATI API Documentation](https://docs.wati.io/)
-- [Express.js](https://expressjs.com/)
-- [Axios](https://axios-http.com/)
+- `WEBHOOK_SECRET` is required and reserved for request verification, but signature validation is not yet implemented in `src/services/webhook.js`.
+- Create and approve the exact template names in your WATI dashboard before sending.
+- The service uses WATI Multi-tenant base URL hardcoded in config.
+
+## Project structure
+
+```
+src/
+  config/        # env + MongoDB connection
+  models/        # Mongoose models (Order, User)
+  routes/        # Analytics endpoints
+  services/      # Webhook processor + WATI client
+  templates/     # Event→template mapping and parameters
+  utils/         # Helpers (phone, date formatting)
+server.js        # Express app bootstrap
+package.json     # scripts and deps
+```
+
+## Acknowledgements
+
+- WATI API
