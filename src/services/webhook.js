@@ -126,6 +126,18 @@ const processWebhook = async (webhookData) => {
     await storeUserData(data.user);
   }
   
+  // Check if order type is 'pos' - skip WhatsApp notification for POS orders
+  if (event.startsWith("order.") && data.order?.type === 'pos') {
+    console.log("🏪 Order type is 'pos' - skipping WhatsApp notification");
+    return {
+      success: true,
+      message: "Order processed and stored in database. WhatsApp notification skipped for POS orders.",
+      event: event,
+      orderType: 'pos',
+      skipped: true
+    };
+  }
+  
   // Extract mobile number based on event type
   let mobileNumber = "";
   
@@ -193,7 +205,7 @@ const generateSamplePayload = (event) => {
         order: {
           _id: "order_" + Date.now(),
           oid: "123456",
-          type: "regular",
+          type: "regular", // Change to "pos" to test POS order (no WhatsApp message)
           status: "new",
           paymentMethod: "COD",
           deliveryMode: "home-delivery",
